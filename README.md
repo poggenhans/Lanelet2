@@ -34,20 +34,19 @@ You can find more documentation in the individual packages and in doxygen commen
 
 ## Installation
 
-### Plug and play
+### Using Docker
 
-There is a Docker container from which you can test things out
+There is a Docker container from which you can test things out:
 
 ```
-cd docker
-./build.sh                    # will build the docker file
-./run.sh                      # starts the docker image, builds the code at start-up
-python -c "import lanelet2"   # quick check to see if all worked
+docker build -t lanelet2 .                    # builds a docker image named "lanelet2"
+docker run -it --rm lanelet2:latest /bin/bash # starts the docker image
+python -c "import lanelet2"                   # quick check to see everything is fine
 ```
 
 The docker image contains a link to your local lanelet2, so you can work and see changes (almost) at the same time. Work with two screens, one local and one on docker. Make your code changes locally, then run again `catkin build` on docker to recompile the code (update python modules).
 
-### Install manually on your pc
+### Manual installation
 
 In case you want to build it in your own way (without the above Docker image) use these instructions.
 
@@ -85,7 +84,7 @@ cd ..
 catkin build
 ```
 
-If unsure, see the [travis build log](https://travis-ci.org/fzi-forschungszentrum-informatik/Lanelet2). It shows the the full installation process, with subsequent build and test, starting at a clean Ubuntu installation.
+If unsure, see the [Dockerfile](Dockerfile) or the [travis build log](https://travis-ci.org/fzi-forschungszentrum-informatik/Lanelet2). It shows the the full installation process, with subsequent build and test based on a docker image with a clean ubuntu installation.
 
 ## Examples
 Examples and common use cases in both C++ and Python can be found [here](lanelet2_examples/README.md).

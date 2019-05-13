@@ -23,10 +23,21 @@ struct AttributeFromPythonStr {
     boost::python::converter::registry::push_back(&convertible, &construct, boost::python::type_id<Attribute>());
   }
 
-  static void* convertible(PyObject* objPtr) { return PyString_Check(objPtr) ? objPtr : nullptr; }  // NOLINT
+  static void* convertible(PyObject* objPtr) {
+#if PY_MAJOR_VERSION < 3
+    return PyString_Check(objPtr) ? objPtr : nullptr;  // NOLINT
+#else
+    return PyUnicode_Check(objPtr) ? objPtr : nullptr;  // NOLINT
+#endif
+  }
 
   static void construct(PyObject* objPtr, boost::python::converter::rvalue_from_python_stage1_data* data) {
+#if PY_MAJOR_VERSION < 3
     const char* value = PyString_AsString(objPtr);
+#else
+    auto pyStr = PyUnicode_AsUTF8String(objPtr);
+    const char* value = PyBytes_AsString(pyStr);
+#endif
     if (value == nullptr) {
       boost::python::throw_error_already_set();
     }
@@ -411,8 +422,12 @@ BOOST_PYTHON_MODULE(PYTHON_API_MODULE_NAME) {  // NOLINT
 
   VectorToListConverter<Points3d>();
   VectorToListConverter<Points2d>();
+  VectorToListConverter<ConstPoints3d>();
+  VectorToListConverter<ConstPoints2d>();
   VectorToListConverter<LineStrings3d>();
   VectorToListConverter<LineStrings2d>();
+  VectorToListConverter<ConstLineStrings3d>();
+  VectorToListConverter<ConstLineStrings2d>();
   VectorToListConverter<BasicPolygon3d>();
   VectorToListConverter<BasicPolygon2d>();
   VectorToListConverter<Polygons3d>();
@@ -474,6 +489,8 @@ BOOST_PYTHON_MODULE(PYTHON_API_MODULE_NAME) {  // NOLINT
   IterableConverter()
       .fromPython<Points3d>()
       .fromPython<Points2d>()
+      .fromPython<ConstLineStrings3d>()
+      .fromPython<ConstLineStrings2d>()
       .fromPython<LineStrings3d>()
       .fromPython<LineStrings2d>()
       .fromPython<Polygons2d>()
@@ -618,13 +635,14 @@ BOOST_PYTHON_MODULE(PYTHON_API_MODULE_NAME) {  // NOLINT
       .def(IsConstLineString<ConstPolygon3d>())
       .def(IsConstPrimitive<ConstPolygon3d>());
 
-  class_<Polygon2d>("Polygon2d", "A two-dimensional lanelet polygon",
-                    init<Id, Points3d, AttributeMap>("Polygon2d(Id, point_list, attributes"))
+  class_<Polygon2d, bases<ConstPolygon2d>>("Polygon2d", "A two-dimensional lanelet polygon",
+                                           init<Id, Points3d, AttributeMap>("Polygon2d(Id, point_list, attributes"))
       .def(IsLineString<Polygon2d>())
       .def(IsPrimitive<Polygon2d>());
 
-  class_<Polygon3d>("Polygon3d", "A three-dimensional lanelet polygon",
-                    init<Id, Points3d, AttributeMap>((arg("id"), arg("points"), arg("attributes") = AttributeMap())))
+  class_<Polygon3d, bases<ConstPolygon3d>>(
+      "Polygon3d", "A three-dimensional lanelet polygon",
+      init<Id, Points3d, AttributeMap>((arg("id"), arg("points"), arg("attributes") = AttributeMap())))
       .def(IsLineString<Polygon3d>())
       .def(IsPrimitive<Polygon3d>());
 
@@ -729,6 +747,7 @@ BOOST_PYTHON_MODULE(PYTHON_API_MODULE_NAME) {  // NOLINT
   class_<RegulatoryElement, boost::noncopyable, RegulatoryElementPtr>(
       "RegulatoryElement", "A Regulatory element defines traffic rules that affect a lanelet", no_init)
       .def(IsConstPrimitive<RegulatoryElement>())
+      .add_property("id", &RegulatoryElement::id, &RegulatoryElement::setId)
       .add_property("parameters", static_cast<GetParamSig>(&RegulatoryElement::getParameters),
                     "the parameters (ie traffic signs, lanelets) that affect "
                     "this RegulatoryElement")
@@ -798,7 +817,7 @@ BOOST_PYTHON_MODULE(PYTHON_API_MODULE_NAME) {  // NOLINT
       .def("addCancellingRefLine", &TrafficSign::addCancellingRefLine)
       .def("removeCancellingRefLine", &TrafficSign::removeCancellingRefLine)
       .def("type", &TrafficSign::type)
-      .def("cancelType", &TrafficSign::cancelType);
+      .def("cancelTypes", &TrafficSign::cancelTypes);
 
   implicitly_convertible<std::shared_ptr<TrafficSign>, RegulatoryElementPtr>();
 
@@ -807,10 +826,18 @@ BOOST_PYTHON_MODULE(PYTHON_API_MODULE_NAME) {  // NOLINT
   class_<SpeedLimit, boost::noncopyable, std::shared_ptr<SpeedLimit>, bases<TrafficSign>>(  // NOLINT
       "SpeedLimit", "A speed limit regulatory element", no_init);
 
-  wrapLayer<AreaLayer>("AreaLayer");
-  wrapLayer<LaneletLayer>("LaneletLayer");
-  wrapLayer<PolygonLayer>("PolygonLayer");
-  wrapLayer<LineStringLayer>("LineStringLayer");
+  wrapLayer<AreaLayer>("AreaLayer")
+      .def("findUsages", +[](AreaLayer& self, RegulatoryElementPtr& e) { return self.findUsages(e); })
+      .def("findUsages", +[](AreaLayer& self, LineString3d& ls) { return self.findUsages(ls); });
+  wrapLayer<LaneletLayer>("LaneletLayer")
+      .def("findUsages", +[](LaneletLayer& self, RegulatoryElementPtr& e) { return self.findUsages(e); })
+      .def("findUsages", +[](LaneletLayer& self, LineString3d& ls) { return self.findUsages(ls); });
+  wrapLayer<PolygonLayer>("PolygonLayer").def("findUsages", +[](PolygonLayer& self, Point3d& p) {
+    return self.findUsages(p);
+  });
+  wrapLayer<LineStringLayer>("LineStringLayer").def("findUsages", +[](LineStringLayer& self, Point3d& p) {
+    return self.findUsages(p);
+  });
   wrapLayer<PointLayer>("PointLayer");
   wrapLayer<RegulatoryElementLayer>("RegulatoryElementLayer");
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import os
 import tempfile
 
@@ -23,7 +23,8 @@ def tutorial():
     # We do our best to keep the python interface in sync with the c++ implementation. As a rule of thumb: Everything
     # you can do in c++ works pretty similar in python, we just "pythonized" some things. Therefore this tutorial only
     # shows you just the most important things and the things that are different from C++. For the rest have a look
-    # at the c++ tutorial.
+    # at the c++ tutorial. An increasing number of classes and their members have docstrings, use pydoc to get an api
+    # overview.
     part1primitives()
     part2regulatory_elements()
     part3lanelet_map()
@@ -33,21 +34,33 @@ def tutorial():
 
 
 def part1primitives():
-    # Primitives work very similar to c++, except that the data can be accessed as properties instead of functions
-    p = Point3d(getId(), 0, 0, 0)
+    # Primitives work very similar to c++. As a rule of thumb: all getX() and setX() functions from c++ are just plain
+    # ".x" members in python. All core primitives have __repr__ methods to ease introspection.
+
+    # A point as the most generic member has an Id, attributes are like a string dictionary and x/y/z coordinates.
+    # getId() is a small helper function that ensures globally unique IDs for all primitives if used consistently.
+    p = Point3d(getId(), x=0, y=0, z=0)
     assert p.x == 0
     p.id = getId()
     p.attributes["key"] = "value"
     assert "key" in p.attributes
     assert p.attributes["key"] == "value"
 
-    # the 2d/3d mechanics work too
+    # As in C++, 3D objects can be converted to 2D without losing information (the z component is just hidden).
+    # Since these converted objects are just views on the same data, changes are visible to all of them:
     p2d = lanelet2.geometry.to2D(p)
+    p3d = lanelet2.geometry.to3D(p2d)
+    p.z = 0.1
+    assert p.z == p3d.z
 
-    # all (common) geometry calculations are available as well:
+    # All (common) geometry calculations are available as well in the geometry module.
+    # Note that using 2D object will compute 2D distances, 3D objects will return 3D distances.
+    # Mixing 2D and 3D objects will return an error.
+    # Distance can be computed on all objects (also lanelets), where it will return the shortest
+    # distance between two primitives.
     p2 = Point3d(getId(), 1, 0, 0)
-    assert lanelet2.geometry.distance(p, p2) == 1
-    assert lanelet2.geometry.distance(p2d, Point2d(getId(), 1, 0, 1)) == 1
+    assert lanelet2.geometry.distance(p, p2) > 1
+    assert lanelet2.geometry.distance(p2d, lanelet2.geometry.to2D(p2)) == 1
 
     # linestrings work conceptually similar to a list (but they only accept points, of course)
     ls = LineString3d(getId(), [p, p2])
@@ -57,11 +70,40 @@ def part1primitives():
     for pt in ls:
         assert pt.y == 0
 
-    ls_inv = ls.invert()
-    assert ls_inv[0] == p2
     ls.append(Point3d(getId(), 2, 0, 0))
     del ls[2]
 
+    # Note the inversion feature. It returns a view on the linestring data that returns points
+    # in reversed order. Since it's just a view, modifications are visible to all of them.
+    ls_inv = ls.invert()
+    assert ls_inv[0] == p2
+    assert ls_inv.inverted()
+    assert not ls.inverted()
+
+    # Lets briefly discuss Lanelets:
+    llt = Lanelet(getId(), leftBound=ls, rightBound=get_linestring_at_y(1))
+    llt.attributes["type"] = "road"
+    assert llt.leftBound == ls
+    # The .centerline member is a linestring that is computed from the left and right bounds.
+    # Because it is not regular primitive, its IDs are zero. It will also not be stored in a map.
+    assert llt.centerline.id == 0
+
+    # For geometry calculations, you can obtain a polygon from the lanelet:
+    poly2d = llt.polygon2d()
+    center2d = lanelet2.geometry.to2D(llt.centerline)
+    assert lanelet2.geometry.distance(poly2d, center2d) == 0
+
+    # You can also override the centerline with a custom one. This is at your own risk, there 
+    # are no checks it's actually within the Lanelet. This one will be stored in a map.
+    new_centerline = get_linestring_at_y(0.5)
+    llt.centerline = new_centerline
+    assert llt.centerline == new_centerline
+
+    # Finally, you can also get an inverted view on the Lanelet where left and right bounds are 
+    # swapped and reversed:
+    llt_inv = llt.invert()
+    assert llt_inv.inverted()
+    assert llt_inv.rightBound == ls_inv
 
 def part2regulatory_elements():
     # regulatory elements profit from pythons type system

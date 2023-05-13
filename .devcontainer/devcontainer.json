@@ -1,0 +1,25 @@
+{
+    "dockerFile": "../Dockerfile",
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "args": {
+            "DISTRIBUTION": "22.04",
+            "ROS_DISTRO": "humble",
+            "ROS": "ros2",
+            "DEV": "1"
+        },
+        "target": "lanelet2_deps"
+    },
+    "containerUser": "developer",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/developer/workspace/lanelet2,type=bind,consistency=cached",
+    "workspaceFolder": "/home/developer/workspace/lanelet2",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "llvm-vs-code-extensions.vscode-clangd",
+                "ms-vscode.cpptools",
+                "ms-python.python"
+            ]
+        }
+    }
+}
